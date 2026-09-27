@@ -6,7 +6,7 @@ section: Guides
 ---
 
 <Callout type="note">
-  This is the public API/SDK guide for integrators. For internal implementation detail (Orchestrator state machine, signer roles), see [`docs/guides/withdrawals.md`](https://github.com/OFFER-HUB/OFFER-HUB/blob/main/docs/guides/withdrawals.md) in the repo.
+  This is the public API/SDK guide for integrators. For internal implementation detail (Orchestrator state machine, signer roles), see [`docs/guides/withdrawals.md`](https://github.com/OFFER-HUB/OFFER-HUB/blob/main/docs/guides/withdrawals.md) in the repo. The authoritative list of withdrawal states and their valid transitions is on the [State Machines](/docs/guide/state-machines) page.
 </Callout>
 
 When users want to move funds off the platform, they create a withdrawal request. OFFER-HUB supports withdrawals to external Stellar wallets (crypto mode) or bank accounts/local methods (AirTM mode).
@@ -22,24 +22,21 @@ When users want to move funds off the platform, they create a withdrawal request
 
 ### State Machine
 
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING
-    PENDING --> PROCESSING
-    PROCESSING --> COMPLETED
-    PROCESSING --> FAILED
-    COMPLETED --> [*]
-    FAILED --> [*]
-```
-
-### State Descriptions
+Withdrawals move through the canonical `WithdrawalStatus` states. The full transition table, the terminal states and the `INVALID_STATE` errors are documented on the [State Machines](/docs/guide/state-machines#withdrawal-state-machine) page — that diagram and table are the single source of truth for this lifecycle.
 
 | State | Description |
 |-------|-------------|
-| `PENDING` | Request created, awaiting processing |
-| `PROCESSING` | Transaction being submitted |
-| `COMPLETED` | Funds sent to destination |
-| `FAILED` | Transaction failed, funds returned to balance |
+| `WITHDRAWAL_CREATED` | Request created, awaiting commit |
+| `WITHDRAWAL_COMMITTED` | Committed to the provider, awaiting processing |
+| `WITHDRAWAL_PENDING` | Provider processing the payout |
+| `WITHDRAWAL_PENDING_USER_ACTION` | Blocked on the user (KYC, verification) |
+| `WITHDRAWAL_COMPLETED` | Funds sent to destination |
+| `WITHDRAWAL_FAILED` | Payout failed, reserved funds returned to balance |
+| `WITHDRAWAL_CANCELED` | Canceled before commit |
+
+<Callout type="note">
+  Crypto withdrawals skip the asynchronous states — `POST /withdrawals` with `destinationType: crypto` sends on Stellar synchronously and returns `WITHDRAWAL_COMPLETED`, or `WITHDRAWAL_FAILED` if the payment could not be submitted. Only the AirTM path walks the full chain.
+</Callout>
 
 ## Crypto Withdrawals
 
@@ -67,11 +64,11 @@ curl -X POST http://localhost:4000/api/v1/withdrawals \
 ```json
 {
   "data": {
-    "id": "wth_xyz789",
+    "id": "wd_xyz789",
     "userId": "usr_abc123",
     "amount": "50.00",
     "currency": "USD",
-    "status": "PENDING",
+    "status": "WITHDRAWAL_COMPLETED",
     "destination": {
       "type": "stellar",
       "address": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3EQRQGPGAVRQ"
@@ -89,7 +86,7 @@ curl -X POST http://localhost:4000/api/v1/withdrawals \
 4. **Sign transaction** — Sign with user's encrypted key
 5. **Submit to network** — Send to Stellar Horizon
 6. **Confirm on-chain** — Wait for ledger confirmation
-7. **Update status** — Mark as `COMPLETED`
+7. **Update status** — Mark as `WITHDRAWAL_COMPLETED`
 
 ```mermaid
 flowchart LR
@@ -131,11 +128,11 @@ curl -X POST http://localhost:4000/api/v1/withdrawals \
 ```json
 {
   "data": {
-    "id": "wth_xyz789",
+    "id": "wd_xyz789",
     "userId": "usr_abc123",
     "amount": "50.00",
     "currency": "USD",
-    "status": "PENDING",
+    "status": "WITHDRAWAL_CREATED",
     "destination": {
       "type": "airtm",
       "email": "user@example.com"
@@ -155,7 +152,7 @@ curl -X POST http://localhost:4000/api/v1/withdrawals \
 AirTM withdrawals require user confirmation:
 
 ```bash
-curl -X POST http://localhost:4000/api/v1/withdrawals/wth_xyz789/commit \
+curl -X POST http://localhost:4000/api/v1/withdrawals/wd_xyz789/commit \
   -H "Authorization: Bearer ohk_live_your_api_key"
 ```
 
@@ -168,7 +165,7 @@ Or redirect user to `commitUrl` for web-based confirmation.
 ## Getting Withdrawal Details
 
 ```bash
-curl http://localhost:4000/api/v1/withdrawals/wth_xyz789 \
+curl http://localhost:4000/api/v1/withdrawals/wd_xyz789 \
   -H "Authorization: Bearer ohk_live_your_api_key"
 ```
 
@@ -177,11 +174,11 @@ curl http://localhost:4000/api/v1/withdrawals/wth_xyz789 \
 ```json
 {
   "data": {
-    "id": "wth_xyz789",
+    "id": "wd_xyz789",
     "userId": "usr_abc123",
     "amount": "50.00",
     "currency": "USD",
-    "status": "COMPLETED",
+    "status": "WITHDRAWAL_COMPLETED",
     "destination": {
       "type": "stellar",
       "address": "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3EQRQGPGAVRQ"
@@ -204,7 +201,7 @@ curl "http://localhost:4000/api/v1/withdrawals?user_id=usr_abc123" \
   -H "Authorization: Bearer ohk_live_your_api_key"
 
 # Filter by status
-curl "http://localhost:4000/api/v1/withdrawals?status=COMPLETED" \
+curl "http://localhost:4000/api/v1/withdrawals?status=WITHDRAWAL_COMPLETED" \
   -H "Authorization: Bearer ohk_live_your_api_key"
 
 # Date range
@@ -218,10 +215,10 @@ curl "http://localhost:4000/api/v1/withdrawals?created_after=2026-02-01" \
 {
   "data": [
     {
-      "id": "wth_xyz789",
+      "id": "wd_xyz789",
       "userId": "usr_abc123",
       "amount": "50.00",
-      "status": "COMPLETED",
+      "status": "WITHDRAWAL_COMPLETED",
       "created_at": "2026-02-25T12:00:00.000Z"
     }
   ],
@@ -258,7 +255,7 @@ console.log('Status:', withdrawal.status);
 // Wait for completion
 const completed = await sdk.withdrawals.waitForStatus(
   withdrawal.id,
-  'COMPLETED'
+  'WITHDRAWAL_COMPLETED'
 );
 console.log('Transaction hash:', completed.transaction.hash);
 ```
@@ -373,8 +370,11 @@ If exceeded:
 | `INSUFFICIENT_FUNDS` | Balance too low | Check available balance first |
 | `INVALID_DESTINATION` | Bad Stellar address | Validate address format |
 | `DESTINATION_NO_TRUSTLINE` | Account can't receive USDC | Recipient must add trustline |
-| `WITHDRAWAL_IN_PROGRESS` | Existing pending withdrawal | Wait for current to complete |
+| `WITHDRAWAL_NOT_COMMITTABLE` | Commit attempted outside `WITHDRAWAL_CREATED` | Check the withdrawal's current status |
+| `WITHDRAWAL_DESTINATION_INVALID` | Bad Stellar address or unsupported destination | Validate the destination before submitting |
 | `AMOUNT_BELOW_MINIMUM` | Amount too small | Increase withdrawal amount |
+
+A commit on a withdrawal that has already left `WITHDRAWAL_CREATED` is a state-machine violation, not a validation failure — see the [Withdrawal state machine](/docs/guide/state-machines#withdrawal-state-machine) for the edges that are actually available from each state.
 
 ### Handling Failed Withdrawals
 
@@ -448,9 +448,9 @@ For crypto withdrawals, verify on Stellar:
 
 ```typescript
 // Get withdrawal details
-const withdrawal = await sdk.withdrawals.get('wth_xyz789');
+const withdrawal = await sdk.withdrawals.get('wd_xyz789');
 
-if (withdrawal.status === 'COMPLETED') {
+if (withdrawal.status === 'WITHDRAWAL_COMPLETED') {
   const txHash = withdrawal.transaction.hash;
 
   // View on Stellar Expert (testnet)
@@ -469,6 +469,7 @@ if (withdrawal.status === 'COMPLETED') {
 
 ## Next Steps
 
+- [State Machines](/docs/guide/state-machines) — every valid withdrawal transition and the `INVALID_STATE` errors
 - [Deposits Guide](/docs/guide/deposits) — Adding funds to accounts
 - [Wallets Guide](/docs/guide/wallets) — Understanding invisible wallets
 - [API Reference](/docs/api-reference/overview) — Full endpoint documentation

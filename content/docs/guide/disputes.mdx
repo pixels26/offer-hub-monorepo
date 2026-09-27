@@ -6,7 +6,7 @@ section: Guides
 ---
 
 <Callout type="note">
-  This is the public API/SDK guide for integrators. For internal implementation detail (Orchestrator state machine, signer roles), see [`docs/guides/disputes.md`](https://github.com/OFFER-HUB/OFFER-HUB/blob/main/docs/guides/disputes.md) in the repo.
+  This is the public API/SDK guide for integrators. For internal implementation detail (Orchestrator state machine, signer roles), see [`docs/guides/disputes.md`](https://github.com/OFFER-HUB/OFFER-HUB/blob/main/docs/guides/disputes.md) in the repo. The authoritative list of dispute states and their valid transitions is on the [State Machines](/docs/guide/state-machines) page.
 </Callout>
 
 Disputes are a critical part of any marketplace. When a buyer and seller disagree, OFFER-HUB provides a structured process to resolve conflicts fairly while funds remain safely locked in escrow.
@@ -433,6 +433,7 @@ Dispute idempotency keys are stored **forever** — you cannot open the same dis
 
 ## Next Steps
 
+- [State Machines](/docs/guide/state-machines) — every valid dispute and order transition
 - [Withdrawals Guide](/docs/guide/withdrawals) — Move funds off-platform
 - [Events (SSE)](/docs/api-reference/events) — SSE event stream and event catalog
 - [SDK Reference](/docs/sdk/quick-start) — Full SDK documentation

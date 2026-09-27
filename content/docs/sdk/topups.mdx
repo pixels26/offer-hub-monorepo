@@ -66,7 +66,7 @@ type TopupStatus =
   | 'TOPUP_CANCELED';
 
 interface Topup {
-  id: string; // e.g. "top_01HXYZ789"
+  id: string; // e.g. "topup_01HXYZ789"
   userId: string; // e.g. "usr_abc123"
   amount: string; // e.g. "100.00"
   currency: string; // e.g. "USD"
@@ -244,7 +244,7 @@ async get(id: string): Promise<Topup>
 #### Example
 
 ```typescript
-const topup = await sdk.topups.get('top_xyz789');
+const topup = await sdk.topups.get('topup_xyz789');
 
 if (topup.status === 'TOPUP_SUCCEEDED') {
   console.log('Top-up has completed successfully.');
@@ -285,7 +285,7 @@ async refresh(id: string): Promise<Topup>
 #### Example
 
 ```typescript
-const refreshed = await sdk.topups.refresh('top_xyz789');
+const refreshed = await sdk.topups.refresh('topup_xyz789');
 console.log('Synchronized top-up status:', refreshed.status);
 ```
 
@@ -324,7 +324,7 @@ async cancel(id: string): Promise<Topup>
 import { OfferHubSDK, InvalidTransitionError } from '@offerhub/sdk';
 
 try {
-  const canceledTopup = await sdk.topups.cancel('top_xyz789');
+  const canceledTopup = await sdk.topups.cancel('topup_xyz789');
   console.log(`Top-up ${canceledTopup.id} has been canceled.`);
 } catch (error) {
   if (error instanceof InvalidTransitionError) {

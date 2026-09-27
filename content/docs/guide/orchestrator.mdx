@@ -119,6 +119,10 @@ The seller requests a withdrawal. The Orchestrator signs a Stellar payment trans
 
 The Orchestrator runs two distinct state machines: an **Order state machine** that tracks the order lifecycle, and an internal **Escrow state machine** that tracks the on-chain escrow contract. Invalid transitions are rejected with a `409 Conflict` error. Both diagrams below match `docs/architecture/state-machines.md` in the orchestrator repository exactly.
 
+<Callout type="tip">
+  Orders and escrow are only two of the six machines the Orchestrator enforces. Dispute, withdrawal, top-up and milestone each have their own, all tabulated — with valid transitions, terminal states and the `INVALID_STATE` errors they produce — on the [State Machines](/docs/guide/state-machines) page.
+</Callout>
+
 ### Order State Machine
 
 <OrderStateMachineDiagram />

@@ -6,7 +6,7 @@ section: Guides
 ---
 
 <Callout type="note">
-  This is the public API/SDK guide for integrators. For internal implementation detail (Orchestrator state machine, signer roles), see [`docs/guides/deposits.md`](https://github.com/OFFER-HUB/OFFER-HUB/blob/main/docs/guides/deposits.md) in the repo.
+  This is the public API/SDK guide for integrators. For internal implementation detail (Orchestrator state machine, signer roles), see [`docs/guides/deposits.md`](https://github.com/OFFER-HUB/OFFER-HUB/blob/main/docs/guides/deposits.md) in the repo. The authoritative list of top-up states and their valid transitions is on the [State Machines](/docs/guide/state-machines) page.
 </Callout>
 
 Before users can create orders or fund escrow, they need balance in their account. OFFER-HUB supports two deposit methods depending on your payment provider configuration.
@@ -112,11 +112,11 @@ Response:
 ```json
 {
   "data": {
-    "id": "top_xyz789",
+    "id": "topup_xyz789",
     "userId": "usr_abc123",
     "amount": "100.00",
     "currency": "USD",
-    "status": "pending",
+    "status": "TOPUP_AWAITING_USER_CONFIRMATION",
     "airtm": {
       "paymentUrl": "https://app.airtm.com/payment/abc123",
       "expiresAt": "2026-02-25T13:00:00.000Z"

@@ -158,13 +158,21 @@ User deposits USDC → Creates order → Funds reserved
 - **NOT JWT**: API keys are stateless, no refresh tokens
 
 ### ID Prefixes
+Defined in `packages/shared/src/constants/id-prefixes.ts` in the orchestrator repo. Format: `{prefix}_{nanoid(32)}`. The full table, including which resources are database-generated CUIDs instead, is on the [Data Model](./architecture/data-model.md) page.
+
 | Entity | Prefix | Example |
 |--------|--------|---------|
 | User | `usr_` | `usr_abc123` |
 | Order | `ord_` | `ord_xyz789` |
-| Withdrawal | `wth_` | `wth_def456` |
-| API Key | `key_` | `key_ghi012` |
+| Top-up | `topup_` | `topup_abc123` |
+| Escrow | `esc_` | `esc_xyz789` |
 | Dispute | `dsp_` | `dsp_jkl345` |
+| Withdrawal | `wd_` | `wd_def456` |
+| Event | `evt_` | `evt_ghi012` |
+| Audit log | `aud_` | `aud_mno345` |
+| API key | `key_` | `key_pqr678` |
+| Marketplace | `mkt_` | `mkt_stu901` |
+| Wallet | `wal_` | `wal_vwx234` |
 
 ## For AI Assistants
 
@@ -175,6 +183,7 @@ If you're an AI assistant working on this project:
 3. **API uses API Keys, NOT JWT** - Important for authentication code
 4. **Neumorphic design system** - Follow the visual DNA guidelines
 5. **State machines are strict** - Orders/escrow follow specific state transitions
+6. **State machines reference** - Every domain machine is tabulated in the orchestrator repo at `docs/architecture/state-machines.md`, backed by `packages/shared/src/enums/`
 
 ## Contributing
 

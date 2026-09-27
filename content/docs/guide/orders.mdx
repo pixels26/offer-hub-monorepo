@@ -18,7 +18,7 @@ Every order follows a strict state machine — the same canonical diagram used a
 <OrderStateMachineDiagram />
 
 <Callout type="note">
-  The escrow contract itself follows a separate internal [Escrow state machine](/docs/guide/escrow) while the order machine above advances in parallel.
+  The escrow contract itself follows a separate internal [Escrow state machine](/docs/guide/escrow) while the order machine above advances in parallel. Every state and valid transition — for orders, escrows, disputes, withdrawals, top-ups and milestones — is tabulated on the [State Machines](/docs/guide/state-machines) page, together with the `INVALID_STATE` error each illegal transition produces.
 </Callout>
 
 ## Creating an Order
@@ -383,6 +383,7 @@ switch (order.status) {
 
 ## Next Steps
 
+- [State Machines](/docs/guide/state-machines) — every valid order transition and the `INVALID_STATE` errors
 - [Escrow Guide](/docs/guide/escrow) - How blockchain escrow works
 - [Disputes Guide](/docs/guide/disputes) - Handling disputes
 - [Events Reference](/docs/api-reference/events) - All order events

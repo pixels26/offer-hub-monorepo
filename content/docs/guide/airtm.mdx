@@ -153,11 +153,11 @@ Response:
 ```json
 {
   "data": {
-    "id": "top_xyz789",
+    "id": "topup_xyz789",
     "amount": "100.00",
     "currency": "USD",
     "status": "TOPUP_AWAITING_USER_CONFIRMATION",
-    "confirmationUri": "http://localhost:3000/topups/top_xyz789/callback?code=topup_abc123&status=confirmed",
+    "confirmationUri": "http://localhost:3000/topups/topup_xyz789/callback?code=topup_abc123&status=confirmed",
     "expiresAt": "2026-02-25T13:00:00.000Z",
     "createdAt": "2026-02-25T12:00:00.000Z"
   }
@@ -257,7 +257,7 @@ Response:
 ```json
 {
   "data": {
-    "id": "wth_abc456",
+    "id": "wd_abc456",
     "amount": "50.00",
     "currency": "USD",
     "status": "WITHDRAWAL_CREATED",
@@ -277,7 +277,7 @@ With `commit: false` (the default), the payout stays in `WITHDRAWAL_CREATED` unt
 <Badge variant="primary">POST</Badge> `/api/v1/withdrawals/:id/commit?userId=usr_abc123` — requires `write` scope
 
 ```bash
-curl -X POST "http://localhost:4000/api/v1/withdrawals/wth_abc456/commit?userId=usr_abc123" \
+curl -X POST "http://localhost:4000/api/v1/withdrawals/wd_abc456/commit?userId=usr_abc123" \
   -H "Authorization: Bearer ohk_live_your_api_key"
 ```
 
