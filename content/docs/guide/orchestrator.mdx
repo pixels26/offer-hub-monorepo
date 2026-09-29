@@ -58,6 +58,10 @@ flowchart TB
     Trustless[Trustless Work Soroban Contracts Non-custodial]
 ```
 
+Marketplace requests enter the Orchestrator, which coordinates ledger, escrow, events, and idempotency work.
+
+This view is verified against `apps/api/src/modules/orders/orders.controller.ts`, its `dto/create-order.dto.ts`, and `apps/api/src/modules/events/event-catalog.ts` in the Orchestrator repository; those files define the REST boundary, order input, and emitted domain events represented here.
+
 ### Key Components
 
 **Balance Ledger** — tracks `available` and `reserved` balances for every user. All operations are atomic to prevent double-spending.
@@ -117,7 +121,16 @@ The seller requests a withdrawal. The Orchestrator signs a Stellar payment trans
 
 ## State Machines
 
-The Orchestrator runs two distinct state machines: an **Order state machine** that tracks the order lifecycle, and an internal **Escrow state machine** that tracks the on-chain escrow contract. Invalid transitions are rejected with a `409 Conflict` error. Both diagrams below match `docs/architecture/state-machines.md` in the orchestrator repository exactly.
+The Orchestrator runs six state machines, one per domain: **Order** and **Escrow** are drawn in full below, and **Milestone**, **Dispute**, **Top-up**, and **Withdrawal** are each documented — diagram, valid transitions, and the errors their guards raise — on their own page. Every machine reads its states from `packages/shared/src/enums/` and rejects a transition outside the table with the shared invalid-transition error, surfaced as `INVALID_STATE` (or a more specific member of that family). The Order and Escrow diagrams match `docs/architecture/state-machines.md` in the orchestrator repository exactly.
+
+| Machine | States | Guard source | Documented in |
+|---------|--------|--------------|---------------|
+| [Order](#order-state-machine) | `OrderStatus` | `apps/api/src/modules/orders/`, `resolution/` | This page, [Orders Guide](/docs/guide/orders) |
+| [Escrow](#escrow-state-machine-internal) | `EscrowStatus` | `apps/api/src/providers/trustless-work/` | This page, [Escrow Guide](/docs/guide/escrow) |
+| [Milestone](/docs/guide/orders#milestone-state-machine) | `MilestoneStatus` | `apps/api/src/modules/orders/orders.service.ts` | [Orders Guide](/docs/guide/orders#milestone-state-machine) |
+| [Dispute](/docs/guide/disputes#state-machine) | `DisputeStatus` | `apps/api/src/modules/disputes/`, `resolution/` | [Disputes Guide](/docs/guide/disputes#state-machine) |
+| [Top-up](/docs/sdk/topups#top-up-state-machine) | `TopUpStatus` | `apps/api/src/modules/topups/topups.service.ts` | [Top-ups reference](/docs/sdk/topups#top-up-state-machine) |
+| [Withdrawal](/docs/guide/withdrawals#withdrawal-state-machine) | `WithdrawalStatus` | `apps/api/src/modules/withdrawals/withdrawals.service.ts` | [Withdrawals Guide](/docs/guide/withdrawals#withdrawal-state-machine) |
 
 ### Order State Machine
 
@@ -156,9 +169,20 @@ The escrow contract moves through its own lifecycle inside the Orchestrator whil
 | `REFUNDED` | Funds returned |
 | `DISPUTED` | Active dispute |
 
-<Callout variant="warning">
+<Callout type="warning">
   Once an escrow reaches `RELEASED` or `REFUNDED` the contract is terminal — no further on-chain transitions are allowed. The order itself only reaches `CLOSED` after the escrow resolves and cleanup completes.
 </Callout>
+
+### Milestone, Dispute, Top-up and Withdrawal
+
+These four machines run alongside the order lifecycle. Each is documented once, on the page that owns it, with its diagram, valid transitions, and the `INVALID_STATE`-family errors its guards produce:
+
+| Machine | Flow | Documented in |
+|---------|------|---------------|
+| Milestone | `OPEN` → `COMPLETED`, created with the parent order and required before a release | [Milestone State Machine](/docs/guide/orders#milestone-state-machine) |
+| Dispute | `OPEN` → `UNDER_REVIEW` → `RESOLVED`, gating the order while funds stay locked | [Dispute State Machine](/docs/guide/disputes#state-machine) |
+| Top-up | `TOPUP_CREATED` → awaiting confirmation → processing → succeeded or failed | [Top-up State Machine](/docs/sdk/topups#top-up-state-machine) |
+| Withdrawal | Parallel crypto and AirTM payout paths, from `WITHDRAWAL_CREATED` to a terminal state | [Withdrawal State Machine](/docs/guide/withdrawals#withdrawal-state-machine) |
 
 ## Error Handling
 
@@ -229,5 +253,5 @@ AIRTM_WEBHOOK_SECRET=your-webhook-secret
 ```
 
 <Callout type="warning">
-  AirTM requires users to complete KYC on their platform. Crypto mode has no KYC requirement.
+  AirTM requires users to complete KYC on their platform. Crypto mode has no KYC requirement. For complete architecture and deployment details on the default crypto rail, see the [Crypto-Native (Stellar) Provider Guide](/docs/guide/crypto-native).
 </Callout>

@@ -153,11 +153,11 @@ Response:
 ```json
 {
   "data": {
-    "id": "top_xyz789",
+    "id": "topup_xyz789",
     "amount": "100.00",
     "currency": "USD",
     "status": "TOPUP_AWAITING_USER_CONFIRMATION",
-    "confirmationUri": "http://localhost:3000/topups/top_xyz789/callback?code=topup_abc123&status=confirmed",
+    "confirmationUri": "http://localhost:3000/topups/topup_xyz789/callback?code=topup_abc123&status=confirmed",
     "expiresAt": "2026-02-25T13:00:00.000Z",
     "createdAt": "2026-02-25T12:00:00.000Z"
   }
@@ -181,18 +181,11 @@ The callback URI points at `GET /api/v1/topups/:id/callback` — a **public** en
 
 ### Top-Up Status Lifecycle
 
-```mermaid
-stateDiagram-v2
-    [*] --> TOPUP_CREATED
-    TOPUP_CREATED --> TOPUP_AWAITING_USER_CONFIRMATION: payin created
-    TOPUP_AWAITING_USER_CONFIRMATION --> TOPUP_PROCESSING: user confirms
-    TOPUP_AWAITING_USER_CONFIRMATION --> TOPUP_CANCELED: user cancels
-    TOPUP_PROCESSING --> TOPUP_SUCCEEDED: payment cleared
-    TOPUP_PROCESSING --> TOPUP_FAILED: payment failed
-    TOPUP_SUCCEEDED --> [*]
-    TOPUP_FAILED --> [*]
-    TOPUP_CANCELED --> [*]
-```
+<Callout type="note">
+  This is the canonical [Top-up state machine](/docs/sdk/topups#top-up-state-machine). The same diagram and its invalid transitions are documented once, in the SDK top-ups reference.
+</Callout>
+
+<TopUpStateMachineDiagram />
 
 | Status | Meaning |
 |--------|---------|
@@ -285,21 +278,11 @@ Committing from any other status returns `409 WITHDRAWAL_NOT_COMMITTABLE`.
 
 ### Withdrawal Status Lifecycle
 
-```mermaid
-stateDiagram-v2
-    [*] --> WITHDRAWAL_CREATED
-    WITHDRAWAL_CREATED --> WITHDRAWAL_CANCELED: canceled
-    WITHDRAWAL_CREATED --> WITHDRAWAL_COMMITTED: commit
-    WITHDRAWAL_COMMITTED --> WITHDRAWAL_PENDING
-    WITHDRAWAL_PENDING --> WITHDRAWAL_PENDING_USER_ACTION
-    WITHDRAWAL_PENDING --> WITHDRAWAL_COMPLETED: funds sent
-    WITHDRAWAL_PENDING --> WITHDRAWAL_FAILED
-    WITHDRAWAL_PENDING_USER_ACTION --> WITHDRAWAL_PENDING
-    WITHDRAWAL_PENDING_USER_ACTION --> WITHDRAWAL_FAILED
-    WITHDRAWAL_COMPLETED --> [*]
-    WITHDRAWAL_FAILED --> [*]
-    WITHDRAWAL_CANCELED --> [*]
-```
+<Callout type="note">
+  This is the canonical [Withdrawal state machine](/docs/guide/withdrawals#withdrawal-state-machine). The same diagram and its invalid transitions are documented once, in the Withdrawals Guide.
+</Callout>
+
+<WithdrawalStateMachineDiagram />
 
 | Status | Meaning |
 |--------|---------|

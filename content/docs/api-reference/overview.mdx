@@ -129,6 +129,10 @@ Response:
 
 ## Error Codes
 
+The Orchestrator defines 40+ domain-specific error codes categorized across authentication, validation, users, funds, orders, escrow, disputes, top-ups, withdrawals, external providers, idempotency, rate limiting, and internal system errors.
+
+For the exhaustive catalog of all 40+ codes with causes, fixes, citations, and `@offerhub/sdk` class mappings, see the dedicated [Error Codes Reference](/docs/api-reference/errors).
+
 | Code | HTTP | When to Use |
 |------|------|-------------|
 | `VALIDATION_ERROR` | 400 | Invalid fields in request |
@@ -150,10 +154,12 @@ The summaries on this page cover the API surface at a glance. The endpoint group
 
 | Page | Endpoints | Source in the Orchestrator repo |
 | --- | --- | --- |
+| [Orders & Milestones Endpoints](/docs/api-reference/orders) | `POST /orders`, `GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/reserve`, `POST /orders/{id}/cancel`, `GET /orders/{id}/milestones`, `POST /orders/{id}/milestones/{milestoneRef}/complete` | `apps/api/src/modules/orders/orders.controller.ts` |
 | [Escrow Endpoints](/docs/api-reference/escrow) | `POST /orders/{id}/escrow`, `POST /orders/{id}/escrow/fund` | `apps/api/src/modules/orders/orders.controller.ts` |
 | [Resolution Endpoints](/docs/api-reference/resolution) | `POST /orders/{orderId}/resolution/release`, `/refund`, `/dispute` | `apps/api/src/modules/resolution/resolution.controller.ts` |
 | [Inbound Webhooks](/docs/api-reference/webhooks) | `POST /webhooks/airtm`, `POST /webhooks/trustless-work` | `apps/api/src/modules/webhooks/webhooks.controller.ts` |
 | [Events (SSE)](/docs/api-reference/events) | `GET /events` plus the event catalog | `apps/api/src/modules/events/events.controller.ts` |
+| [Error Codes](/docs/api-reference/errors) | 40+ error codes, envelope format, and correlation IDs | `packages/shared/src/constants/error-codes.ts` |
 
 ## Escrows
 
@@ -235,7 +241,7 @@ Refunds escrowed funds back to the buyer. See [Resolution Endpoints](/docs/api-r
 
 <Badge variant="primary">POST</Badge> `/api/v1/orders/{id}/resolution/dispute`
 
-Opens a dispute on an escrow for resolution. See [Resolution Endpoints](/docs/api-reference/resolution#post-apiv1ordersorderidresolutiondispute) for the `OpenDisputeDto` fields and how a dispute is later resolved.
+Opens a dispute on an escrow for resolution. See [Resolution Endpoints](/docs/api-reference/resolution#post-apiv1ordersorderidresolutiondispute) for the `OpenDisputeDto` fields and the [Dispute state machine](/docs/guide/disputes#state-machine) for the `OPEN` → `UNDER_REVIEW` → `RESOLVED` transitions that follow.
 
 ---
 
@@ -291,7 +297,7 @@ Subscribers consume real-time domain events over the [SSE event stream](/docs/ap
 
 <Badge variant="primary">POST</Badge> `/api/v1/withdrawals`
 
-Initiate a withdrawal from user balance.
+Initiate a withdrawal from user balance. It opens the [Withdrawal state machine](/docs/guide/withdrawals#withdrawal-state-machine) at `WITHDRAWAL_CREATED`; crypto destinations settle inline while AirTM payouts continue through `commit` and the payout webhooks.
 
 **Request Body**
 
@@ -514,6 +520,8 @@ Wallet endpoints are scoped to a user: `/users/{userId}/wallet`.
 
 ### Top-ups
 
+Each status these endpoints return is a state in the [Top-up state machine](/docs/sdk/topups#top-up-state-machine).
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/topups` | <Badge variant="primary">POST</Badge> | Create top-up |
@@ -525,6 +533,8 @@ Wallet endpoints are scoped to a user: `/users/{userId}/wallet`.
 
 ### Orders
 
+The order lifecycle up to funding, plus milestone bookkeeping, is documented endpoint by endpoint in [Orders & Milestones Endpoints](/docs/api-reference/orders) — real DTO fields, preconditions, error codes, and cURL plus SDK examples for each route.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/orders` | <Badge variant="primary">POST</Badge> | Create order |
@@ -533,7 +543,7 @@ Wallet endpoints are scoped to a user: `/users/{userId}/wallet`.
 | `/orders/{id}/reserve` | <Badge variant="primary">POST</Badge> | Reserve funds |
 | `/orders/{id}/cancel` | <Badge variant="primary">POST</Badge> | Cancel order |
 | `/orders/{id}/milestones` | <Badge variant="success">GET</Badge> | Get milestones |
-| `/orders/{id}/milestones/{ref}/complete` | <Badge variant="primary">POST</Badge> | Complete milestone |
+| `/orders/{id}/milestones/{ref}/complete` | <Badge variant="primary">POST</Badge> | Complete milestone — the `OPEN` → `COMPLETED` transition of the [Milestone state machine](/docs/guide/orders#milestone-state-machine) |
 
 ### Escrow
 
@@ -552,6 +562,8 @@ Wallet endpoints are scoped to a user: `/users/{userId}/wallet`.
 
 ### Disputes
 
+`assign` and `resolve` drive the [Dispute state machine](/docs/guide/disputes#state-machine) to `UNDER_REVIEW` and `RESOLVED`.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/disputes` | <Badge variant="success">GET</Badge> | List disputes |
@@ -560,6 +572,8 @@ Wallet endpoints are scoped to a user: `/users/{userId}/wallet`.
 | `/disputes/{id}/resolve` | <Badge variant="primary">POST</Badge> | Resolve dispute |
 
 ### Withdrawals
+
+See the [Withdrawal state machine](/docs/guide/withdrawals#withdrawal-state-machine) for the transitions each status represents.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -602,6 +616,7 @@ The API uses path versioning:
 
 ## Next Steps
 
+- [Error Codes](/docs/api-reference/errors) - Complete 40+ error code reference and SDK mappings
 - [Events (SSE)](/docs/api-reference/events) - Real-time event stream and event catalog
 - [Inbound Webhooks](/docs/api-reference/webhooks) - AirTM and Trustless Work receivers
 - [Quick Start](/docs/guide/quick-start) - Your first API call

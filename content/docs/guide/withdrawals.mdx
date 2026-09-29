@@ -5,7 +5,7 @@ order: 19
 section: Guides
 ---
 
-This page documents the withdrawal controller and DTOs in the [OFFER-HUB Orchestrator](https://github.com/OFFER-HUB/OFFER-HUB): `apps/api/src/modules/withdrawals/withdrawals.controller.ts`, `apps/api/src/modules/withdrawals/dto/create-withdrawal.dto.ts`, and `apps/api/src/modules/withdrawals/withdrawals.service.ts`.
+This page documents the withdrawal controller and DTOs in the [OFFER-HUB Orchestrator](https://github.com/OFFER-HUB/OFFER-HUB): `apps/api/src/modules/withdrawals/withdrawals.controller.ts`, `apps/api/src/modules/withdrawals/dto/create-withdrawal.dto.ts`, and `apps/api/src/modules/withdrawals/withdrawals.service.ts`. The state values below match `packages/shared/src/enums/withdrawal-status.enum.ts`.
 
 Every request uses `Authorization: Bearer <api-key>`. Write endpoints require the `write` scope; read endpoints require `read`.
 
@@ -17,23 +17,38 @@ Every request uses `Authorization: Bearer <api-key>`. Write endpoints require th
 | `bank` | AirTM | Asynchronous payout; create first, then commit unless `commit: true` is supplied. |
 | `airtm_balance` | AirTM | Asynchronous payout; follows the same create/commit flow as `bank`. |
 
+## Withdrawal state machine
+
+Both provider paths share one machine. A `crypto` (Stellar) destination settles inline while `POST /withdrawals` is still open, so it goes from `WITHDRAWAL_CREATED` straight to a terminal state; `bank` and `airtm_balance` destinations are AirTM payouts that must be committed and are then advanced by AirTM payout webhooks.
+
+<WithdrawalStateMachineDiagram />
+
+### Valid transitions
+
+| From | To | Trigger |
+|------|----|---------|
+| — | `WITHDRAWAL_CREATED` | `POST /api/v1/withdrawals` with `commit: false` |
+| `WITHDRAWAL_CREATED` | `WITHDRAWAL_COMMITTED` | `POST /api/v1/withdrawals/{id}/commit` (AirTM payout accepted) |
+| `WITHDRAWAL_CREATED` | `WITHDRAWAL_COMPLETED` | `POST /api/v1/withdrawals` with `destinationType: "crypto"` — the Stellar payment confirms inline |
+| `WITHDRAWAL_CREATED` | `WITHDRAWAL_CANCELED` | Payout abandoned before commit |
+| `WITHDRAWAL_COMMITTED` | `WITHDRAWAL_PENDING` | AirTM accepts the payout |
+| `WITHDRAWAL_PENDING` | `WITHDRAWAL_PENDING_USER_ACTION` | `payout.pending_user_action` webhook |
+| `WITHDRAWAL_PENDING` | `WITHDRAWAL_COMPLETED` | `payout.completed` webhook |
+| `WITHDRAWAL_PENDING_USER_ACTION` | `WITHDRAWAL_PENDING` | The user completes the requested action |
+| `WITHDRAWAL_PENDING` / `WITHDRAWAL_PENDING_USER_ACTION` / `WITHDRAWAL_CREATED` (crypto) | `WITHDRAWAL_FAILED` | `payout.failed` webhook or a failed Stellar submission |
+
 The statuses used by the service are `WITHDRAWAL_CREATED`, `WITHDRAWAL_COMMITTED`, `WITHDRAWAL_PENDING`, `WITHDRAWAL_PENDING_USER_ACTION`, `WITHDRAWAL_COMPLETED`, `WITHDRAWAL_FAILED`, and `WITHDRAWAL_CANCELED`.
 
-```mermaid
-stateDiagram-v2
-    [*] --> WITHDRAWAL_CREATED
-    WITHDRAWAL_CREATED --> WITHDRAWAL_COMMITTED: commit
-    WITHDRAWAL_COMMITTED --> WITHDRAWAL_PENDING
-    WITHDRAWAL_PENDING --> WITHDRAWAL_PENDING_USER_ACTION
-    WITHDRAWAL_PENDING --> WITHDRAWAL_COMPLETED
-    WITHDRAWAL_PENDING_USER_ACTION --> WITHDRAWAL_PENDING
-    WITHDRAWAL_CREATED --> WITHDRAWAL_COMPLETED: crypto provider
-    WITHDRAWAL_CREATED --> WITHDRAWAL_FAILED
-    WITHDRAWAL_PENDING --> WITHDRAWAL_FAILED
-    WITHDRAWAL_COMPLETED --> [*]
-    WITHDRAWAL_FAILED --> [*]
-    WITHDRAWAL_CANCELED --> [*]
-```
+### Invalid transitions
+
+The service guards the commit transition and rejects every other source state. The state machine raises a single code, which the SDK classifies as `InvalidTransitionError`:
+
+| Attempted transition | `error.code` | HTTP | When |
+|----------------------|--------------|------|------|
+| Commit a withdrawal that is not `WITHDRAWAL_CREATED` | `WITHDRAWAL_NOT_COMMITTABLE` | `409` | `POST /withdrawals/{id}/commit` after the payout already advanced or was canceled |
+| Commit an AirTM payout whose provider reference is missing | `PROVIDER_ERROR` | `422` | The stored `airtmPayoutId` is absent, so there is nothing to commit |
+
+The sibling state machines are the [Top-up machine](/docs/sdk/topups#top-up-state-machine) for inbound funds and the [Order](/docs/guide/orders) / [Escrow](/docs/guide/escrow) machines for escrow settlement.
 
 ## POST `/withdrawals`
 
@@ -113,7 +128,7 @@ curl -X POST "http://localhost:4000/api/v1/withdrawals/wd_abc123/commit?userId=u
   -H "Authorization: Bearer ohk_live_your_api_key"
 ```
 
-This endpoint returns the updated `WithdrawalResponse`. It is not applicable to crypto withdrawals, which complete during creation. A non-committable state returns `WITHDRAWAL_NOT_COMMITTABLE` (409); a missing provider payout returns `PROVIDER_ERROR` (422).
+This endpoint returns the updated `WithdrawalResponse`. It is not applicable to crypto withdrawals, which complete during creation. This is the `WITHDRAWAL_CREATED` → `WITHDRAWAL_COMMITTED` transition of the [withdrawal state machine](#withdrawal-state-machine); the guard it enforces is documented under [invalid transitions](#invalid-transitions).
 
 ## POST `/withdrawals/:id/refresh`
 

@@ -98,6 +98,38 @@ const order = await sdk.orders.create({
 
 Milestones are created as part of the parent order. After the order reaches `IN_PROGRESS`, use the milestone reference to inspect or complete an individual milestone. Completing a milestone updates that milestone within the same order; it does not create a new order or escrow contract.
 
+### Milestone State Machine
+
+A milestone has one of two states, from `MilestoneStatus` (`packages/shared/src/enums/milestone-status.enum.ts`), advanced by `OrdersService` (`apps/api/src/modules/orders/orders.service.ts`). There is no cancellation path: a milestone is created `OPEN`, completes once, and stays `COMPLETED`.
+
+<MilestoneStateMachineDiagram />
+
+| State | Description | Endpoint that enters it |
+|-------|-------------|------------------------|
+| `OPEN` | Created with the parent order and not yet delivered | `POST /orders` (with a `milestones` array) |
+| `COMPLETED` | Delivered and accepted; terminal | `POST /orders/{id}/milestones/{ref}/complete` |
+
+### Valid transitions
+
+| From | To | Trigger |
+|------|----|---------|
+| — | `OPEN` | The order is created with milestones whose amounts sum to the order amount |
+| `OPEN` | `COMPLETED` | `POST /api/v1/orders/{id}/milestones/{ref}/complete` while the parent order is `IN_PROGRESS` |
+
+### Invalid transitions
+
+Milestone operations that do not fit the machine above are rejected by the order guards (`apps/api/src/modules/orders/`), which raise the shared invalid-transition code:
+
+| Attempted transition | `error.code` | HTTP | When |
+|----------------------|--------------|------|------|
+| Complete a milestone while the parent order is not `IN_PROGRESS` | `INVALID_STATE` | `400` | The order has not funded its escrow yet, or is already settling |
+| Complete a milestone that is already `COMPLETED` | `INVALID_STATE` | `400` | Replaying the completion call |
+| Complete a milestone reference that does not exist on the order | `ORDER_NOT_FOUND` | `404` | The `{ref}` is not a `milestoneRef` of that order |
+
+<Callout type="warning">
+  Completing every milestone does **not** settle the order. The release endpoint separately re-checks that all milestones are `COMPLETED` and returns `400 INVALID_STATE` naming the incomplete ones — see [Resolution Endpoints](/docs/api-reference/resolution#preconditions).
+</Callout>
+
 ### List Milestones
 
 ```bash
@@ -112,7 +144,7 @@ curl http://localhost:4000/api/v1/orders/ord_xyz789/milestones \
   "success": true,
   "data": [
     {
-      "id": "mls_abc123",
+      "id": "cm0design",
       "orderId": "ord_xyz789",
       "milestoneRef": "design",
       "title": "UI/UX Design",
@@ -139,7 +171,7 @@ curl -X POST http://localhost:4000/api/v1/orders/ord_xyz789/milestones/design/co
 {
   "success": true,
   "data": {
-    "id": "mls_abc123",
+    "id": "cm0design",
     "orderId": "ord_xyz789",
     "milestoneRef": "design",
     "title": "UI/UX Design",
@@ -151,7 +183,7 @@ curl -X POST http://localhost:4000/api/v1/orders/ord_xyz789/milestones/design/co
 ```
 
 <Callout type="note">
-  A milestone can be completed only while its parent order is `IN_PROGRESS`. Completing all milestones does not replace the order resolution flow; release the order's funds separately.
+  A milestone can be completed only while its parent order is `IN_PROGRESS` — that is the `OPEN` → `COMPLETED` transition of the [Milestone state machine](#milestone-state-machine). Completing all milestones does not replace the order resolution flow; release the order's funds separately.
 </Callout>
 
 ## Reserving Funds
@@ -383,6 +415,7 @@ switch (order.status) {
 
 ## Next Steps
 
+- [Orders & Milestones Endpoints](/docs/api-reference/orders) - per-endpoint parameters, response schemas, and error codes
 - [Escrow Guide](/docs/guide/escrow) - How blockchain escrow works
 - [Disputes Guide](/docs/guide/disputes) - Handling disputes
 - [Events Reference](/docs/api-reference/events) - All order events

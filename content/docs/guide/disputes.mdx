@@ -32,31 +32,50 @@ A dispute should be opened when:
 
 ### State Machine
 
-```
-IN_PROGRESS
-      ↓
-DISPUTED (awaiting resolution)
-      ↓
-  ┌───┴───┐
-  ↓       ↓
-REFUNDED  RELEASED
-(buyer)   (seller)
-      ↓
-    CLOSED
-```
+The dispute record has its own three-state machine, separate from the order it freezes. It is driven by `ResolutionService.openDispute` (`apps/api/src/modules/resolution/resolution.service.ts`) when the dispute is created, then by `DisputesController` / `DisputesService` (`apps/api/src/modules/disputes/`) for `assign` and `resolve`. The states match `packages/shared/src/enums/dispute-status.enum.ts`.
+
+<DisputeStateMachineDiagram />
 
 ### State Descriptions
 
-| State | Description |
-|-------|-------------|
-| `DISPUTED` | Funds locked, awaiting platform resolution |
-| `REFUNDED` | Dispute resolved in buyer's favor |
-| `RELEASED` | Dispute resolved in seller's favor |
-| `CLOSED` | Order completed after resolution |
+| State | Description | Endpoint that enters it |
+|-------|-------------|------------------------|
+| `OPEN` | Dispute created; no support agent assigned yet. The order is frozen in `DISPUTED` | `POST /orders/{orderId}/resolution/dispute` |
+| `UNDER_REVIEW` | Support agent assigned and reviewing the case | `POST /disputes/{disputeId}/assign` |
+| `RESOLVED` | Decision recorded and executed on-chain; the dispute is terminal | `POST /disputes/{disputeId}/resolve` |
+
+### Valid Transitions
+
+| From | To | Trigger |
+|------|----|---------|
+| — | `OPEN` | `POST /api/v1/orders/{orderId}/resolution/dispute` on an order in `IN_PROGRESS` |
+| `OPEN` | `UNDER_REVIEW` | `POST /api/v1/disputes/{disputeId}/assign` with an `agentId` |
+| `UNDER_REVIEW` | `RESOLVED` | `POST /api/v1/disputes/{disputeId}/resolve` with `FULL_RELEASE`, `FULL_REFUND`, or `SPLIT` |
+
+<Callout type="note">
+  `assign` is optional in the contract but **required in practice**: `resolve` only accepts a dispute that is already `UNDER_REVIEW`, so an `OPEN` dispute cannot skip straight to `RESOLVED`. Resolving is also irreversible — once `RESOLVED`, a dispute can never be reopened.
+</Callout>
+
+The order around the dispute follows the [Order state machine](/docs/guide/orders), and the on-chain contract follows the [Escrow state machine](/docs/guide/escrow). When the dispute resolves, the order moves to `RELEASED` or `REFUNDED` and then `CLOSED` depending on the decision.
+
+### Invalid Transitions
+
+Every other pair is rejected by the guards in `ResolutionService` and the disputes module. The invalid-transition failures share one code — `INVALID_STATE` — with the DTO-level failures listed alongside them for completeness:
+
+| Attempted transition | `error.code` | HTTP | Raised by |
+|----------------------|--------------|------|-----------|
+| Open a dispute on an order that is not `IN_PROGRESS` | `INVALID_STATE` | `400` | `InvalidResolutionStateException` (`apps/api/src/modules/resolution/exceptions/resolution.exceptions.ts`) |
+| Resolve a dispute that is not `UNDER_REVIEW` | `INVALID_STATE` | `400` | `InvalidDisputeStateException` (`apps/api/src/modules/disputes/`) |
+| Resolve with an unknown decision value | `INVALID_RESOLUTION` | `400` | `ResolveDisputeDto` validation |
+| Open a second dispute for the same order | `DISPUTE_ALREADY_OPEN` | `409` | `DisputeAlreadyExistsException` |
+
+<Callout type="warning">
+  `INVALID_STATE` is returned as HTTP `400` by the resolution and dispute guards even though the shared `ERROR_HTTP_STATUS` catalog maps it to `409`. Branch on `error.code`, not on the status alone — see [Resolution Endpoints](/docs/api-reference/resolution#error-codes-for-this-group) for the full breakdown.
+</Callout>
 
 ## Opening a Dispute
 
-Only the buyer can initiate a dispute on an `IN_PROGRESS` order:
+Either party can initiate a dispute, but only on an order that is `IN_PROGRESS`. This call is the entry transition of the [Dispute state machine](#state-machine) above; the endpoint itself is documented in [Resolution Endpoints](/docs/api-reference/resolution#post-apiv1ordersorderidresolutiondispute).
 
 ```bash
 curl -X POST http://localhost:4000/api/v1/orders/ord_xyz789/resolution/dispute \
@@ -116,7 +135,7 @@ This transaction:
 
 ## Resolving Disputes
 
-Only the platform (using the master key or support scope) can resolve disputes.
+Only the platform (using the master key or support scope) can resolve disputes. Resolution is the `UNDER_REVIEW` → `RESOLVED` transition of the [Dispute state machine](#state-machine); a dispute that has not been assigned first is rejected with `INVALID_STATE`.
 
 ### Refund to Buyer
 

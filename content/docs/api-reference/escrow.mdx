@@ -76,7 +76,7 @@ Every Trustless Work write returns an **unsigned XDR**; the Orchestrator signs i
 
 ### Deployment type
 
-`EscrowClient.createEscrow` selects `multi-release` only when the order has **more than one** milestone; zero or one milestone deploys a `single-release` contract. Milestone amounts are validated first — `validateMilestoneAmounts` throws when the milestone amounts do not sum exactly to the order amount, before any chain call is made.
+`EscrowClient.createEscrow` selects `multi-release` only when the order has **more than one** milestone; zero or one milestone deploys a `single-release` contract. Milestone amounts are validated first — `validateMilestoneAmounts` throws when the milestone amounts do not sum exactly to the order amount, before any chain call is made. Milestones themselves follow the two-state [Milestone state machine](/docs/guide/orders#milestone-state-machine).
 
 ## Order and escrow state transitions
 
@@ -418,5 +418,6 @@ await sdk.orders.release("ord_abc123", "All milestones delivered");`
 - [Resolution Endpoints](/docs/api-reference/resolution) — `release`, `refund`, and `dispute`, the three ways an escrow settles
 - [API Reference overview](/docs/api-reference/overview) — base URL, headers, error envelope, idempotency, and pagination
 - [Escrow Guide](/docs/guide/escrow) and [Escrow Flows](/docs/guide/escrow-flows) — contract roles, milestones, and money movement end to end
+- [Milestone state machine](/docs/guide/orders#milestone-state-machine) — the `OPEN` → `COMPLETED` machine `multi-release` contracts track
 - [Events (SSE)](/docs/api-reference/events) — `order.escrow_creating` and `order.escrow_funded`
 - [Self-Hosting](/docs/guide/self-hosting) — the `PLATFORM_USER_ID`, `STELLAR_USDC_ISSUER`, and Trustless Work settings these flows depend on

@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import type { ComponentType } from "react";
 import { OrderStateMachineDiagram } from "../OrderStateMachineDiagram";
 import { EscrowStateMachineDiagram } from "../EscrowStateMachineDiagram";
+import { DisputeStateMachineDiagram } from "../DisputeStateMachineDiagram";
+import { WithdrawalStateMachineDiagram } from "../WithdrawalStateMachineDiagram";
+import { TopUpStateMachineDiagram } from "../TopUpStateMachineDiagram";
+import { MilestoneStateMachineDiagram } from "../MilestoneStateMachineDiagram";
 
 vi.mock("@/components/shared/MermaidDiagram", () => ({
   MermaidDiagram: ({ chart, variant }: { chart?: string; variant?: string }) => (
@@ -9,13 +14,21 @@ vi.mock("@/components/shared/MermaidDiagram", () => ({
   ),
 }));
 
+/** Render one machine and return the chart source it hands to MermaidDiagram. */
+function renderChart(Component: ComponentType): string {
+  const { unmount } = render(<Component />);
+  const diagram = screen.getByTestId("mermaid");
+
+  expect(diagram.getAttribute("data-variant")).toBe("framed");
+
+  const chart = diagram.getAttribute("data-chart") ?? "";
+  unmount();
+  return chart;
+}
+
 describe("state machine diagrams", () => {
   it("renders the canonical Order state machine through MermaidDiagram", () => {
-    render(<OrderStateMachineDiagram />);
-    const diagram = screen.getByTestId("mermaid");
-    const chart = diagram.getAttribute("data-chart") ?? "";
-
-    expect(diagram.getAttribute("data-variant")).toBe("framed");
+    const chart = renderChart(OrderStateMachineDiagram);
 
     // Canonical states from docs/architecture/state-machines.md (Order States)
     for (const state of [
@@ -65,11 +78,7 @@ describe("state machine diagrams", () => {
   });
 
   it("renders the canonical internal Escrow state machine through MermaidDiagram", () => {
-    render(<EscrowStateMachineDiagram />);
-    const diagram = screen.getByTestId("mermaid");
-    const chart = diagram.getAttribute("data-chart") ?? "";
-
-    expect(diagram.getAttribute("data-variant")).toBe("framed");
+    const chart = renderChart(EscrowStateMachineDiagram);
 
     // Canonical states from docs/architecture/state-machines.md (Escrow States (internal))
     for (const state of [
@@ -114,6 +123,139 @@ describe("state machine diagrams", () => {
       "RELEASE_REQUESTED",
     ]) {
       expect(chart).not.toContain(bogus);
+    }
+  });
+
+  it("renders the Dispute state machine (OPEN → UNDER_REVIEW → RESOLVED)", () => {
+    const chart = renderChart(DisputeStateMachineDiagram);
+
+    // DisputeStatus, packages/shared/src/enums/dispute-status.enum.ts
+    for (const state of ["OPEN", "UNDER_REVIEW", "RESOLVED"]) {
+      expect(chart).toContain(state);
+    }
+
+    for (const transition of [
+      "[*] --> OPEN",
+      "OPEN --> UNDER_REVIEW",
+      "UNDER_REVIEW --> RESOLVED",
+      "RESOLVED --> [*]",
+    ]) {
+      expect(chart).toContain(transition);
+    }
+
+    // `resolve` requires UNDER_REVIEW, so OPEN must not jump straight to RESOLVED.
+    expect(chart).not.toContain("OPEN --> RESOLVED");
+
+    // The order-level states the dispute freezes live on the order machine.
+    for (const bogus of ["DISPUTED", "IN_PROGRESS", "CLOSED", "FULL_RELEASE"]) {
+      expect(chart).not.toContain(bogus);
+    }
+  });
+
+  it("renders the Withdrawal state machine with both provider paths", () => {
+    const chart = renderChart(WithdrawalStateMachineDiagram);
+
+    // WithdrawalStatus, packages/shared/src/enums/withdrawal-status.enum.ts
+    for (const state of [
+      "WITHDRAWAL_CREATED",
+      "WITHDRAWAL_COMMITTED",
+      "WITHDRAWAL_PENDING",
+      "WITHDRAWAL_PENDING_USER_ACTION",
+      "WITHDRAWAL_COMPLETED",
+      "WITHDRAWAL_FAILED",
+      "WITHDRAWAL_CANCELED",
+    ]) {
+      expect(chart).toContain(state);
+    }
+
+    for (const transition of [
+      "[*] --> WITHDRAWAL_CREATED",
+      "WITHDRAWAL_CREATED --> WITHDRAWAL_COMMITTED",
+      "WITHDRAWAL_CREATED --> WITHDRAWAL_CANCELED",
+      "WITHDRAWAL_CREATED --> WITHDRAWAL_COMPLETED",
+      "WITHDRAWAL_CREATED --> WITHDRAWAL_FAILED",
+      "WITHDRAWAL_COMMITTED --> WITHDRAWAL_PENDING",
+      "WITHDRAWAL_PENDING --> WITHDRAWAL_PENDING_USER_ACTION",
+      "WITHDRAWAL_PENDING --> WITHDRAWAL_COMPLETED",
+      "WITHDRAWAL_PENDING --> WITHDRAWAL_FAILED",
+      "WITHDRAWAL_PENDING_USER_ACTION --> WITHDRAWAL_PENDING",
+      "WITHDRAWAL_PENDING_USER_ACTION --> WITHDRAWAL_FAILED",
+      "WITHDRAWAL_COMPLETED --> [*]",
+      "WITHDRAWAL_FAILED --> [*]",
+      "WITHDRAWAL_CANCELED --> [*]",
+    ]) {
+      expect(chart).toContain(transition);
+    }
+
+    // Every non-terminal state is reachable, so CANCELED must have an inbound edge.
+    expect(chart).toContain("WITHDRAWAL_CREATED --> WITHDRAWAL_CANCELED");
+
+    // The withdrawal machine must not drift into top-up or order states.
+    for (const bogus of ["TOPUP_", "IN_PROGRESS", "ORDER_CREATED", "DISPUTED"]) {
+      expect(chart).not.toContain(bogus);
+    }
+  });
+
+  it("renders the Top-up state machine", () => {
+    const chart = renderChart(TopUpStateMachineDiagram);
+
+    // TopUpStatus, packages/shared/src/enums/topup-status.enum.ts
+    for (const state of [
+      "TOPUP_CREATED",
+      "TOPUP_AWAITING_USER_CONFIRMATION",
+      "TOPUP_PROCESSING",
+      "TOPUP_SUCCEEDED",
+      "TOPUP_FAILED",
+      "TOPUP_CANCELED",
+    ]) {
+      expect(chart).toContain(state);
+    }
+
+    for (const transition of [
+      "[*] --> TOPUP_CREATED",
+      "TOPUP_CREATED --> TOPUP_AWAITING_USER_CONFIRMATION",
+      "TOPUP_AWAITING_USER_CONFIRMATION --> TOPUP_PROCESSING",
+      "TOPUP_AWAITING_USER_CONFIRMATION --> TOPUP_CANCELED",
+      "TOPUP_PROCESSING --> TOPUP_SUCCEEDED",
+      "TOPUP_PROCESSING --> TOPUP_FAILED",
+      "TOPUP_SUCCEEDED --> [*]",
+      "TOPUP_FAILED --> [*]",
+      "TOPUP_CANCELED --> [*]",
+    ]) {
+      expect(chart).toContain(transition);
+    }
+
+    // A top-up can never reach SUCCEEDED without going through PROCESSING.
+    expect(chart).not.toContain("TOPUP_CREATED --> TOPUP_SUCCEEDED");
+    expect(chart).not.toContain("WITHDRAWAL_");
+  });
+
+  it("renders the Milestone state machine (OPEN → COMPLETED)", () => {
+    const chart = renderChart(MilestoneStateMachineDiagram);
+
+    // MilestoneStatus, packages/shared/src/enums/milestone-status.enum.ts
+    expect(chart).toContain("[*] --> OPEN");
+    expect(chart).toContain("OPEN --> COMPLETED");
+    expect(chart).toContain("COMPLETED --> [*]");
+
+    // There is no cancellation path and no order-level status in this machine.
+    for (const bogus of ["CANCELED", "IN_PROGRESS", "CLOSED", "DISPUTED", "REFUNDED"]) {
+      expect(chart).not.toContain(bogus);
+    }
+  });
+
+  it("produces mermaid that parses for every machine", async () => {
+    const mermaid = await import("mermaid");
+
+    for (const chart of [
+      renderChart(OrderStateMachineDiagram),
+      renderChart(EscrowStateMachineDiagram),
+      renderChart(DisputeStateMachineDiagram),
+      renderChart(WithdrawalStateMachineDiagram),
+      renderChart(TopUpStateMachineDiagram),
+      renderChart(MilestoneStateMachineDiagram),
+    ]) {
+      await expect(mermaid.default.parse(chart)).resolves.toBeTruthy();
     }
   });
 });

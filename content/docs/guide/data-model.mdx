@@ -1,6 +1,6 @@
 ---
 title: Data Model
-description: Reference for the OFFER-HUB database schema — every Prisma model, its fields, relationships, and how the tables fit together.
+description: Reference for the OFFER-HUB database schema — every Prisma model, its ID prefix, fields and relationships, plus the state machine behind each status column.
 order: 14
 section: Guides
 ---
@@ -31,6 +31,49 @@ erDiagram
     orders ||--o| disputes : "may have"
     orders ||--o{ milestones : "splits into"
 ```
+
+## ID Prefixes
+
+Models whose ID an integrator sends back to the API — in a path, a body, or a webhook payload — are generated as `<prefix>_<nanoid>` by the ID factory in `packages/shared/src/utils` (for example `generateDisputeId()` mints the `dsp_` IDs on `Dispute`). Models that are never addressed directly use a CUID and carry no prefix.
+
+| Prefix | Resource | Table | Identifier type | Where it is used |
+|--------|----------|-------|-----------------|------------------|
+| `usr_` | User | `users` | `<prefix>_<nanoid>` | `userId` on every user-scoped route, `buyerId` / `sellerId` on orders |
+| `ord_` | Order | `orders` | `<prefix>_<nanoid>` | `POST /orders`, `{orderId}` on escrow, resolution, and milestone routes |
+| `topup_` | TopUp | `topups` | `<prefix>_<nanoid>` | `{id}` on `/topups/{id}`, `topupId` in `topup.*` events |
+| `esc_` | Escrow | `escrows` | `<prefix>_<nanoid>` | `escrow.id` in order responses, `escrowId` in `order.escrow_*` events |
+| `dsp_` | Dispute | `disputes` | `<prefix>_<nanoid>` | `{disputeId}` on `/disputes/{id}/assign` and `/resolve` |
+| `wd_` | Withdrawal | `withdrawals` | `<prefix>_<nanoid>` | `{id}` on `/withdrawals/{id}` and its `commit` / `refresh` routes |
+| `wal_` | Wallet | `wallets` | `<prefix>_<nanoid>` | `wallet.id` on user wallet responses |
+| `key_` | ApiKey | `api_keys` | `<prefix>_<nanoid>` | `{id}` on `/auth/api-keys/{id}`; the raw key itself is `ohk_live_…` |
+| `aud_` | AuditLog | `audit_logs` | `<prefix>_<nanoid>` | `{id}` on `/audit/logs` |
+| `evt_` | Domain event | — | `<prefix>_<nanoid>` | `eventId` on every SSE frame from `GET /api/v1/events`; events are streamed, not persisted to a table |
+| `mkt_` | Marketplace (tenant scope) | — | `<prefix>_<nanoid>` | The `marketplaceId` isolation scope stored on `api_keys`, `audit_logs`, and `idempotency_keys` |
+
+<Callout type="note">
+  `Balance`, `Milestone`, `WebhookEvent`, `IdempotencyKey`, and `ProcessedTransaction` have no prefix: they are internal rows, so they use a CUID and the API never asks you to round-trip their IDs.
+</Callout>
+
+## Prisma Models
+
+The schema defines these models. The Model Reference below documents each one field by field; this table is the flat index to cross-check against `packages/database/prisma/schema.prisma`.
+
+| Model | Table | Identifier |
+|-------|-------|------------|
+| `User` | `users` | `usr_` |
+| `Balance` | `balances` | CUID |
+| `ApiKey` | `api_keys` | `key_` |
+| `Wallet` | `wallets` | `wal_` |
+| `TopUp` | `topups` | `topup_` |
+| `Order` | `orders` | `ord_` |
+| `Escrow` | `escrows` | `esc_` |
+| `Milestone` | `milestones` | CUID |
+| `Withdrawal` | `withdrawals` | `wd_` |
+| `Dispute` | `disputes` | `dsp_` |
+| `AuditLog` | `audit_logs` | `aud_` |
+| `WebhookEvent` | `webhook_events` | CUID |
+| `IdempotencyKey` | `idempotency_keys` | UUID |
+| `ProcessedTransaction` | `processed_transactions` | CUID |
 
 ## Model Reference
 
@@ -296,6 +339,19 @@ The schema defines these enums. Request bodies and webhook payloads use `UPPER_S
 | `WebhookStatus` | `RECEIVED`, `PROCESSED`, `FAILED`, `IGNORED` |
 | `IdempotencyStatus` | `PROCESSING`, `COMPLETED`, `FAILED` |
 
+## State Machines
+
+None of the `status` columns above is free-form: each is the state of an explicit machine, and any transition outside its table is rejected with the shared invalid-transition error (`INVALID_STATE`, or a specific member of that family).
+
+| Machine | Status column | Diagram, valid transitions, and errors |
+|---------|---------------|----------------------------------------|
+| Order | `orders.status` | [Order state machine](/docs/guide/orders#order-lifecycle) |
+| Escrow | `escrows.status` | [Escrow state machine](/docs/guide/escrow#state-machine) |
+| Milestone | `milestones.status` | [Milestone state machine](/docs/guide/orders#milestone-state-machine) |
+| Dispute | `disputes.status` | [Dispute state machine](/docs/guide/disputes#state-machine) |
+| Top-up | `topups.status` | [Top-up state machine](/docs/sdk/topups#top-up-state-machine) |
+| Withdrawal | `withdrawals.status` | [Withdrawal state machine](/docs/guide/withdrawals#withdrawal-state-machine) |
+
 ## Migrations, Seeds, and Debugging
 
 For self-hosters, the schema lives in `packages/database/prisma/schema.prisma`. Common operations:
@@ -325,9 +381,11 @@ WHERE u.id = 'usr_...';
 
 ## Related Guides
 
-- [Orchestrator](/docs/guide/orchestrator) — how the models drive the payment engine
-- [Orders Guide](/docs/guide/orders) — the order lifecycle across `Order`, `Escrow`, and `Milestone`
+- [Orchestrator](/docs/guide/orchestrator) — how the models drive the payment engine, and the index of all six state machines
+- [Orders Guide](/docs/guide/orders) — the order lifecycle across `Order`, `Escrow`, and `Milestone`, plus the [Milestone state machine](/docs/guide/orders#milestone-state-machine)
+- [Disputes Guide](/docs/guide/disputes) — the [Dispute state machine](/docs/guide/disputes#state-machine) on `disputes.status`
 - [Wallets Guide](/docs/guide/wallets) — wallet encryption and Stellar keypairs
 - [Deposits Guide](/docs/guide/deposits) — `TopUp` and `ProcessedTransaction` flows
-- [Withdrawals Guide](/docs/guide/withdrawals) — `Withdrawal` flows
+- [Withdrawals Guide](/docs/guide/withdrawals) — the [Withdrawal state machine](/docs/guide/withdrawals#withdrawal-state-machine)
+- [Top-ups (SDK)](/docs/sdk/topups) — the [Top-up state machine](/docs/sdk/topups#top-up-state-machine)
 - [Security Best Practices](/docs/guide/security) — protecting balances, wallets, and API keys

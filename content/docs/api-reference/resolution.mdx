@@ -1,7 +1,7 @@
 ---
 title: Resolution Endpoints
 description: Per-endpoint reference for the OFFER-HUB order resolution API — release, refund, and dispute — with real DTO fields, Trustless Work signer roles, valid state transitions, error codes, and cURL plus TypeScript SDK examples.
-order: 44
+order: 46
 section: API Reference
 ---
 
@@ -91,6 +91,10 @@ The escrow record follows its own machine — `FUNDED` becomes `RELEASED`, `REFU
 
 <EscrowStateMachineDiagram />
 
+`POST /resolution/dispute` additionally creates a `Dispute` row, which has its own three-state machine (`packages/shared/src/enums/dispute-status.enum.ts`). The `assign` and `resolve` calls that drive it are in `DisputesController` (`apps/api/src/modules/disputes/disputes.controller.ts`) and are documented in full in the [Disputes Guide](/docs/guide/disputes#state-machine):
+
+<DisputeStateMachineDiagram />
+
 | Endpoint | Order before | Order after | Escrow after |
 | --- | --- | --- | --- |
 | `release` | `IN_PROGRESS` | `RELEASE_REQUESTED` → `RELEASED` → `CLOSED` | `RELEASED` (+ `releasedAt`) |
@@ -128,7 +132,7 @@ Checked in `ResolutionService.requestRelease` before any state change:
 1. The order exists, and has an escrow record — otherwise `400 INVALID_STATE` ("Order must have escrow").
 2. Order status is `IN_PROGRESS` — otherwise `400 INVALID_STATE`.
 3. No active dispute — see the note in [Known behavior](#known-behavior) below.
-4. Every milestone, if the order has any, is `COMPLETED` — otherwise `400 INVALID_STATE` naming the incomplete `milestoneRef` values.
+4. Every milestone, if the order has any, is `COMPLETED` — otherwise `400 INVALID_STATE` naming the incomplete `milestoneRef` values. See the [Milestone state machine](/docs/guide/orders#milestone-state-machine).
 5. Escrow status is `FUNDED` — otherwise `400 INVALID_STATE`.
 6. `OrderStateMachine.assertTransition(IN_PROGRESS → RELEASE_REQUESTED)` (`packages/shared/src/utils`, transition table in `packages/shared/src/enums/order-status.enum.ts`).
 
@@ -199,7 +203,7 @@ Checked in `ResolutionService.requestRelease` before any state change:
 | HTTP | `error.code` | When |
 | --- | --- | --- |
 | `400` | `VALIDATION_ERROR` | Unknown or malformed body property (global `ValidationPipe`). |
-| `400` | `INVALID_STATE` | Order not `IN_PROGRESS`, escrow missing or not `FUNDED`, or a milestone is not `COMPLETED`. Raised as `InvalidResolutionStateException` (`exceptions/resolution.exceptions.ts`). |
+| `400` | `INVALID_STATE` | Order not `IN_PROGRESS`, escrow missing or not `FUNDED`, or a milestone is not `COMPLETED` ([Milestone machine](/docs/guide/orders#milestone-state-machine)). Raised as `InvalidResolutionStateException` (`exceptions/resolution.exceptions.ts`). |
 | `404` | `ORDER_NOT_FOUND` | No order with that ID (`OrderNotFoundException`, `apps/api/src/modules/orders/exceptions/orders.exceptions.ts`). |
 | `409` | `DISPUTE_ALREADY_OPEN` | A dispute that is not `RESOLVED` blocks the release (`ActiveDisputeException`). |
 | `500` | `INTERNAL_ERROR` | A Trustless Work call failed. The order is rolled back to `IN_PROGRESS` first. |
@@ -579,5 +583,6 @@ Every code below is defined once in `packages/shared/src/constants/error-codes.t
 - [Escrow Endpoints](/docs/api-reference/escrow) — `POST /api/v1/orders/{id}/escrow` and `POST /api/v1/orders/{id}/escrow/fund`, the flows that must run before any resolution call
 - [API Reference overview](/docs/api-reference/overview) — base URL, headers, error envelope, idempotency, and pagination
 - [Events (SSE)](/docs/api-reference/events) — `order.release_requested`, `order.released`, `order.refund_requested`, `order.refunded`, `order.closed`, `dispute.opened`, and `dispute.resolved`
-- [Disputes Guide](/docs/guide/disputes) — assign, review, and resolve with `FULL_RELEASE`, `FULL_REFUND`, or `SPLIT`
+- [Disputes Guide](/docs/guide/disputes) — assign, review, and resolve with `FULL_RELEASE`, `FULL_REFUND`, or `SPLIT`, and the [Dispute state machine](/docs/guide/disputes#state-machine)
+- [Orders Guide](/docs/guide/orders#milestone-state-machine) — the Milestone state machine that gates release
 - [Escrow Guide](/docs/guide/escrow) and [Escrow Flows](/docs/guide/escrow-flows) — contract roles and the full money movement

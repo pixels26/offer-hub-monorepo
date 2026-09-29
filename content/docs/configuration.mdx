@@ -168,6 +168,9 @@ These variables are read only by the `@offerhub/cli` package. They are not used 
 
 ### Complete Orchestrator `.env` Template
 
+<Callout type="danger">
+  **Back up `WALLET_ENCRYPTION_KEY` immediately.** If this key is lost, all encrypted Stellar private keys become permanently unrecoverable. Store it in a secrets manager — never in version control. See the [Crypto-Native (Stellar) Provider Guide](/docs/guide/crypto-native) for complete architecture, Horizon monitoring, and production migration steps.
+</Callout>
 ```env
 # ─── Server ──────────────────────────────────────────────────────────────────
 NODE_ENV=development

@@ -21,15 +21,9 @@ The `sdk.topups` resource manages fiat-to-balance deposits when OFFER-HUB is con
 
 ## Top-up State Machine
 
-```mermaid
-stateDiagram-v2
-    [*] --> TOPUP_CREATED: create()
-    TOPUP_CREATED --> TOPUP_AWAITING_USER_CONFIRMATION: AirTM URI Issued
-    TOPUP_AWAITING_USER_CONFIRMATION --> TOPUP_PROCESSING: User Submits Payin
-    TOPUP_AWAITING_USER_CONFIRMATION --> TOPUP_CANCELED: cancel() / Timeout
-    TOPUP_PROCESSING --> TOPUP_SUCCEEDED: Webhook payin.succeeded / refresh()
-    TOPUP_PROCESSING --> TOPUP_FAILED: Webhook payin.failed / refresh()
-```
+Every top-up is a record with a single status from `TopUpStatus` (`packages/shared/src/enums/topup-status.enum.ts`), advanced by `TopupsService` (`apps/api/src/modules/topups/topups.service.ts`) in response to the create, cancel, and refresh calls or to AirTM `payin.*` webhooks.
+
+<TopUpStateMachineDiagram />
 
 | State | Description |
 |---|---|
@@ -39,6 +33,32 @@ stateDiagram-v2
 | `TOPUP_SUCCEEDED` | Payment confirmed by AirTM; user balance credited |
 | `TOPUP_FAILED` | Payment rejected or abandoned by user |
 | `TOPUP_CANCELED` | Top-up cancelled by user or platform before payment completion |
+
+### Valid transitions
+
+| From | To | Trigger |
+|---|---|---|
+| — | `TOPUP_CREATED` | `sdk.topups.create()` → `POST /api/v1/topups` |
+| `TOPUP_CREATED` | `TOPUP_AWAITING_USER_CONFIRMATION` | AirTM pay-in created and `confirmationUri` issued |
+| `TOPUP_AWAITING_USER_CONFIRMATION` | `TOPUP_PROCESSING` | User submits the pay-in |
+| `TOPUP_AWAITING_USER_CONFIRMATION` | `TOPUP_CANCELED` | `sdk.topups.cancel()` → `POST /api/v1/topups/{id}/cancel` |
+| `TOPUP_PROCESSING` | `TOPUP_SUCCEEDED` | `payin.succeeded` webhook, or `sdk.topups.refresh()` observing it |
+| `TOPUP_PROCESSING` | `TOPUP_FAILED` | `payin.failed` webhook, or `sdk.topups.refresh()` observing it |
+
+`TOPUP_SUCCEEDED`, `TOPUP_FAILED`, and `TOPUP_CANCELED` are terminal. [AirTM Guide](/docs/guide/airtm#top-up-status-lifecycle) and [Deposits Guide](/docs/guide/deposits) cover the surrounding money movement.
+
+### Invalid transitions
+
+The machine rejects every other transition with a single code, which the SDK surfaces as `InvalidTransitionError` (`409`):
+
+| Attempted transition | `error.code` | HTTP | When |
+|---|---|---|---|
+| Cancel a top-up that is not `TOPUP_CREATED` / `TOPUP_AWAITING_USER_CONFIRMATION` | `CANNOT_CANCEL_TOPUP` | `409` | `cancel()` called on a `TOPUP_PROCESSING`, `TOPUP_SUCCEEDED`, `TOPUP_FAILED`, or `TOPUP_CANCELED` top-up |
+| Advance a terminal top-up | — | — | No transition exists: `SUCCEEDED`, `FAILED`, and `CANCELED` are terminal, and `refresh()` on them simply re-reads the stored status |
+
+<Callout type="note">
+  `INVALID_STATE` is the family code for rejected transitions across the Orchestrator; per-operation codes such as `CANNOT_CANCEL_TOPUP` and `WITHDRAWAL_NOT_COMMITTABLE` are the specific members of that family. Branch on the specific code when you have it and fall back to the `InvalidTransitionError` class otherwise.
+</Callout>
 
 ---
 
@@ -66,7 +86,7 @@ type TopupStatus =
   | 'TOPUP_CANCELED';
 
 interface Topup {
-  id: string; // e.g. "top_01HXYZ789"
+  id: string; // e.g. "topup_01HXYZ789"
   userId: string; // e.g. "usr_abc123"
   amount: string; // e.g. "100.00"
   currency: string; // e.g. "USD"
@@ -229,7 +249,7 @@ async get(id: string): Promise<Topup>
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `id` | `string` | **Yes** | Top-up unique identifier (`top_...`) |
+| `id` | `string` | **Yes** | Top-up unique identifier (`topup_...`) |
 
 #### Return Type
 
@@ -244,7 +264,7 @@ async get(id: string): Promise<Topup>
 #### Example
 
 ```typescript
-const topup = await sdk.topups.get('top_xyz789');
+const topup = await sdk.topups.get('topup_xyz789');
 
 if (topup.status === 'TOPUP_SUCCEEDED') {
   console.log('Top-up has completed successfully.');
@@ -285,7 +305,7 @@ async refresh(id: string): Promise<Topup>
 #### Example
 
 ```typescript
-const refreshed = await sdk.topups.refresh('top_xyz789');
+const refreshed = await sdk.topups.refresh('topup_xyz789');
 console.log('Synchronized top-up status:', refreshed.status);
 ```
 
@@ -324,7 +344,7 @@ async cancel(id: string): Promise<Topup>
 import { OfferHubSDK, InvalidTransitionError } from '@offerhub/sdk';
 
 try {
-  const canceledTopup = await sdk.topups.cancel('top_xyz789');
+  const canceledTopup = await sdk.topups.cancel('topup_xyz789');
   console.log(`Top-up ${canceledTopup.id} has been canceled.`);
 } catch (error) {
   if (error instanceof InvalidTransitionError) {
